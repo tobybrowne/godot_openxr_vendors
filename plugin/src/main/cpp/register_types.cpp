@@ -91,6 +91,7 @@
 #include "extensions/openxr_meta_recommended_layer_resolution_extension.h"
 #include "extensions/openxr_meta_simultaneous_hands_and_controllers_extension.h"
 #include "extensions/openxr_meta_spatial_entity_mesh_extension.h"
+#include "extensions/openxr_ext_plane_detection_extension.h"
 #include "extensions/openxr_ml_localization_map_extension.h"
 #include "extensions/openxr_ml_marker_understanding_extension.h"
 #include "extensions/openxr_ml_spatial_anchors_extension.h"
@@ -215,6 +216,7 @@ void initialize_plugin_module(ModuleInitializationLevel p_level) {
 			GDREGISTER_CLASS(OpenXRFbAndroidSurfaceSwapchainCreateExtension);
 			GDREGISTER_CLASS(OpenXRHtcFacialTrackingExtension);
 			GDREGISTER_CLASS(OpenXRHtcPassthroughExtension);
+			GDREGISTER_CLASS(OpenXRExtPlaneDetectionExtension);
 			GDREGISTER_CLASS(OpenXRMlLocalizationMapExtension);
 			GDREGISTER_CLASS(OpenXRMlMarkerUnderstandingExtension);
 			GDREGISTER_CLASS(OpenXRMlSpatialAnchorsExtension);
@@ -345,6 +347,10 @@ void initialize_plugin_module(ModuleInitializationLevel p_level) {
 				_register_extension_with_openxr(OpenXRHtcPassthroughExtension::get_singleton());
 			}
 
+			if (_get_bool_project_setting("xr/openxr/extensions/magic_leap/plane_detection")) {
+				_register_extension_with_openxr(OpenXRExtPlaneDetectionExtension::get_singleton());
+			}
+
 			if (_get_bool_project_setting("xr/openxr/extensions/magic_leap/localization_map")) {
 				_register_extension_with_openxr(OpenXRMlLocalizationMapExtension::get_singleton());
 			}
@@ -408,6 +414,7 @@ void initialize_plugin_module(ModuleInitializationLevel p_level) {
 			_register_extension_as_singleton(OpenXRFbBodyTrackingExtension::get_singleton());
 			_register_extension_as_singleton(OpenXRHtcFacialTrackingExtension::get_singleton());
 			_register_extension_as_singleton(OpenXRHtcPassthroughExtension::get_singleton());
+			_register_extension_as_singleton(OpenXRExtPlaneDetectionExtension::get_singleton());
 			_register_extension_as_singleton(OpenXRMlLocalizationMapExtension::get_singleton());
 			_register_extension_as_singleton(OpenXRMlMarkerUnderstandingExtension::get_singleton());
 			_register_extension_as_singleton(OpenXRMlSpatialAnchorsExtension::get_singleton());
@@ -591,6 +598,7 @@ void add_plugin_project_settings() {
 	_add_bool_project_setting(project_settings, "xr/openxr/extensions/meta/application_space_warp", false);
 	_add_bool_project_setting(project_settings, "xr/openxr/extensions/meta/environment_depth", false);
 
+	_add_bool_project_setting(project_settings, "xr/openxr/extensions/magic_leap/plane_detection", false);
 	_add_bool_project_setting(project_settings, "xr/openxr/extensions/magic_leap/localization_map", false);
 	_add_bool_project_setting(project_settings, "xr/openxr/extensions/magic_leap/marker_understanding", false);
 	_add_bool_project_setting(project_settings, "xr/openxr/extensions/magic_leap/spatial_anchors", false);

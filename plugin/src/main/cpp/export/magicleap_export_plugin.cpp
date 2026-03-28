@@ -68,6 +68,9 @@ String MagicleapEditorExportPlugin::_get_android_manifest_element_contents(const
 	contents += "    <uses-permission android:name=\"com.magicleap.permission.SPACE_MANAGER\" />\n";
 	contents += "    <uses-permission android:name=\"com.magicleap.permission.SPACE_IMPORT_EXPORT\" />\n";
 
+	// Required for XR_EXT_plane_detection.
+	contents += "    <uses-permission android:name=\"com.magicleap.permission.SPATIAL_MAPPING\" />\n";
+
 	// Always include this.
 	contents += "    <uses-feature android:name=\"com.magicleap.api_level\" android:version=\"20\" />\n";
 
