@@ -3,6 +3,15 @@
 This plugin provides the functionality to support vendor-specific XR
 devices (e.g: Meta, Pico devices) and access vendor-specific OpenXR extensions
 
+**Toby Note:**
+OpenXR hads two types of functionality:
+
+- Core Spec - everyone must implement these core features, Godot has a built-in way of interacting with this.
+- Extensions - these are client-specific functionality. It's still a part of OpenXR however these functions often have a vendor identifier in their name `F_ML` or `F_META`.
+
+The core Godot code does not interact with these extensions, this add-on is literally just a wrapper to allow Godot to call those extension functions.
+The actual implementation of these functions is already done on the device, we just need to call the function from here.
+
 **Note:**
 
 - Version `2.x` and higher of this plugin requires **Godot 4.2 or newer**
@@ -22,6 +31,7 @@ User manual pages can be found [here](https://godotvr.github.io/godot_openxr_ven
 
 After cloning this project, run the following command in the project root directory to initialize
 the `godot-cpp` submodule:
+
 ```
 git submodule update --init
 ```
@@ -31,13 +41,17 @@ git submodule update --init
 The following build command run all the build commands mentioned in the 'Expanded build instructions' section below.
 
 #### Linux / MacOS
+
 Run the following command from the root directory to build the plugin artifacts:
+
 ```
 ./gradlew buildPlugin
 ```
 
 #### Windows
+
 Run the following command from the root directory to build the plugin artifacts:
+
 ```
 gradlew.bat buildPlugin
 ```
@@ -48,7 +62,9 @@ These are all the build commands that are being run by the `gradlew buildPlugin`
 They are detailed here for those needing to customize / troubleshoot their build process.
 
 #### Building the Godot-CPP bindings
+
 Build the Android C++ bindings using the following commands.
+
 ```
 cd thirdparty/godot-cpp
 scons platform=android target=template_debug arch=arm64 custom_api_file=../godot_cpp_gdextension_api/extension_api.json
@@ -61,20 +77,26 @@ When the command is completed, you should have static libraries stored in `third
 that will be used for compilation by the plugin.
 
 #### Building the Plugin
+
 Run the following command from the root directory to generate the editor gdextension plugin:
+
 ```
 scons target=template_debug custom_api_file=thirdparty/godot_cpp_gdextension_api/extension_api.json
 scons target=template_release custom_api_file=thirdparty/godot_cpp_gdextension_api/extension_api.json
 ```
 
 ##### Linux / MacOS
+
 Run the following command from the root directory to build the vendors `AAR` Android binaries:
+
 ```
 ./gradlew build
 ```
 
 ##### Windows
+
 Run the following command from the root directory to build the vendors `AAR` Android binaries:
+
 ```
 gradlew.bat build
 ```
@@ -91,6 +113,7 @@ Work in progress builds are available under [actions](https://github.com/GodotVR
 ### Installing android build templates
 
 The use of a Godot Android plugin requires the use of the gradle build option in Godot:
+
 - Open your Godot XR project in Godot
 - Open the `Project` menu
 - Select `Install Android Build templates`
@@ -109,8 +132,9 @@ in your project.
 ### Configuring your export
 
 Back in Godot open the `Project` menu and select `Export...`:
+
 - If it doesn't already exist, create an Android export configuration by pressing `Add...` and
-selecting `Android`
+  selecting `Android`
 - Tick the `Use Gradle Build` tickbox
 - Select `OpenXR` as the **XR Mode** under the **XR Features** section
 - Enable the XR vendor you need to use
