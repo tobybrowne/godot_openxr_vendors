@@ -65,6 +65,8 @@ void OpenXRMlLocalizationMapExtension::_bind_methods() {
 	ClassDB::bind_method(D_METHOD("get_localization_error_flags"), &OpenXRMlLocalizationMapExtension::get_localization_error_flags);
 	ClassDB::bind_method(D_METHOD("get_localization_map_uuid"), &OpenXRMlLocalizationMapExtension::get_localization_map_uuid);
 	ClassDB::bind_method(D_METHOD("get_localization_maps"), &OpenXRMlLocalizationMapExtension::get_localization_maps);
+	ClassDB::bind_method(D_METHOD("export_localization_map", "uuid"), &OpenXRMlLocalizationMapExtension::export_localization_map);
+	ClassDB::bind_method(D_METHOD("import_localization_map", "data"), &OpenXRMlLocalizationMapExtension::import_localization_map);
 
 	ADD_SIGNAL(MethodInfo("localization_changed",
 			PropertyInfo(Variant::INT, "state"),
@@ -226,8 +228,99 @@ Array OpenXRMlLocalizationMapExtension::get_localization_maps() const {
 	return result;
 }
 
+PackedByteArray OpenXRMlLocalizationMapExtension::export_localization_map(const String &p_uuid) const {
+	PackedByteArray result;
+	if (!ml_localization_map_ext || cached_session == XR_NULL_HANDLE) {
+		return result;
+	}
+
+	// Parse UUID string to XrUuidEXT
+	String hex = p_uuid.replace("-", "");
+	if (hex.length() != 32) {
+		UtilityFunctions::printerr("export_localization_map: invalid UUID format");
+		return result;
+	}
+	XrUuidEXT map_uuid = {};
+	for (int i = 0; i < 16; i++) {
+		map_uuid.data[i] = (uint8_t)hex.substr(i * 2, 2).hex_to_int();
+	}
+
+	// Create export handle
+	XrExportedLocalizationMapML exported_map = XR_NULL_HANDLE;
+	XrResult xr_result = xrCreateExportedLocalizationMapML(cached_session, &map_uuid, &exported_map);
+	if (XR_FAILED(xr_result)) {
+		UtilityFunctions::printerr("export_localization_map: xrCreateExportedLocalizationMapML failed result=", (int64_t)xr_result);
+		return result;
+	}
+
+	// Two-call pattern to get data size then data
+	uint32_t data_size = 0;
+	xr_result = xrGetExportedLocalizationMapDataML(exported_map, 0, &data_size, nullptr);
+	if (XR_FAILED(xr_result) || data_size == 0) {
+		UtilityFunctions::printerr("export_localization_map: size query failed result=", (int64_t)xr_result);
+		xrDestroyExportedLocalizationMapML(exported_map);
+		return result;
+	}
+
+	std::vector<char> data(data_size);
+	xr_result = xrGetExportedLocalizationMapDataML(exported_map, data_size, &data_size, data.data());
+	xrDestroyExportedLocalizationMapML(exported_map);
+	if (XR_FAILED(xr_result)) {
+		UtilityFunctions::printerr("export_localization_map: data fetch failed result=", (int64_t)xr_result);
+		return result;
+	}
+
+	result.resize(data_size);
+	memcpy(result.ptrw(), data.data(), data_size);
+	return result;
+}
+
+String OpenXRMlLocalizationMapExtension::import_localization_map(const PackedByteArray &p_data) {
+	if (!ml_localization_map_ext || cached_session == XR_NULL_HANDLE) {
+		return String();
+	}
+
+	XrLocalizationMapImportInfoML import_info = {
+		XR_TYPE_LOCALIZATION_MAP_IMPORT_INFO_ML,
+		nullptr,
+		(uint32_t)p_data.size(),
+		(char *)p_data.ptr(),
+	};
+
+	XrUuidEXT map_uuid = {};
+	XrResult xr_result = xrImportLocalizationMapML(cached_session, &import_info, &map_uuid);
+	if (XR_FAILED(xr_result)) {
+		UtilityFunctions::printerr("import_localization_map: import failed result=", (int64_t)xr_result);
+		return String();
+	}
+
+	// Request the device to localize into the imported map
+	XrMapLocalizationRequestInfoML request_info = {
+		XR_TYPE_MAP_LOCALIZATION_REQUEST_INFO_ML,
+		nullptr,
+		map_uuid,
+	};
+	xr_result = xrRequestMapLocalizationML(cached_session, &request_info);
+	if (XR_FAILED(xr_result)) {
+		UtilityFunctions::printerr("import_localization_map: xrRequestMapLocalizationML failed result=", (int64_t)xr_result);
+	}
+
+	const uint8_t *d = map_uuid.data;
+	char buf[37];
+	snprintf(buf, sizeof(buf),
+			"%02x%02x%02x%02x-%02x%02x-%02x%02x-%02x%02x-%02x%02x%02x%02x%02x%02x",
+			d[0], d[1], d[2], d[3], d[4], d[5], d[6], d[7],
+			d[8], d[9], d[10], d[11], d[12], d[13], d[14], d[15]);
+	return String(buf);
+}
+
 bool OpenXRMlLocalizationMapExtension::initialize_ml_localization_map_extension(const XrInstance &p_instance) {
 	GDEXTENSION_INIT_XR_FUNC_V(xrEnableLocalizationEventsML);
 	GDEXTENSION_INIT_XR_FUNC_V(xrQueryLocalizationMapsML);
+	GDEXTENSION_INIT_XR_FUNC_V(xrCreateExportedLocalizationMapML);
+	GDEXTENSION_INIT_XR_FUNC_V(xrDestroyExportedLocalizationMapML);
+	GDEXTENSION_INIT_XR_FUNC_V(xrGetExportedLocalizationMapDataML);
+	GDEXTENSION_INIT_XR_FUNC_V(xrImportLocalizationMapML);
+	GDEXTENSION_INIT_XR_FUNC_V(xrRequestMapLocalizationML);
 	return true;
 }

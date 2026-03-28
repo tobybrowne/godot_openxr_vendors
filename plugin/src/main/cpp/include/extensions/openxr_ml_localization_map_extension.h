@@ -74,6 +74,8 @@ public:
 	int get_localization_error_flags() const { return (int)current_error_flags; }
 	String get_localization_map_uuid() const;
 	Array get_localization_maps() const;
+	PackedByteArray export_localization_map(const String &p_uuid) const;
+	String import_localization_map(const PackedByteArray &p_data);
 
 	static OpenXRMlLocalizationMapExtension *get_singleton();
 
@@ -94,6 +96,29 @@ private:
 			(uint32_t), map_capacity_input,
 			(uint32_t *), map_count_output,
 			(XrLocalizationMapML *), maps)
+
+	EXT_PROTO_XRRESULT_FUNC3(xrCreateExportedLocalizationMapML,
+			(XrSession), session,
+			(const XrUuidEXT *), map_uuid,
+			(XrExportedLocalizationMapML *), map)
+
+	EXT_PROTO_XRRESULT_FUNC1(xrDestroyExportedLocalizationMapML,
+			(XrExportedLocalizationMapML), map)
+
+	EXT_PROTO_XRRESULT_FUNC4(xrGetExportedLocalizationMapDataML,
+			(XrExportedLocalizationMapML), map,
+			(uint32_t), buffer_capacity_input,
+			(uint32_t *), buffer_count_output,
+			(char *), buffer)
+
+	EXT_PROTO_XRRESULT_FUNC3(xrImportLocalizationMapML,
+			(XrSession), session,
+			(const XrLocalizationMapImportInfoML *), import_info,
+			(XrUuidEXT *), map_uuid)
+
+	EXT_PROTO_XRRESULT_FUNC2(xrRequestMapLocalizationML,
+			(XrSession), session,
+			(const XrMapLocalizationRequestInfoML *), request_info)
 
 	bool initialize_ml_localization_map_extension(const XrInstance &p_instance);
 	void cleanup();

@@ -64,6 +64,10 @@ String MagicleapEditorExportPlugin::_get_android_manifest_element_contents(const
 		contents += "    <uses-permission android:name=\"com.magicleap.permission.MARKER_TRACKING\" />\n";
 	}
 
+	// Required for XR_ML_localization_map — space listing, export, and import.
+	contents += "    <uses-permission android:name=\"com.magicleap.permission.SPACE_MANAGER\" />\n";
+	contents += "    <uses-permission android:name=\"com.magicleap.permission.SPACE_IMPORT_EXPORT\" />\n";
+
 	// Always include this.
 	contents += "    <uses-feature android:name=\"com.magicleap.api_level\" android:version=\"20\" />\n";
 
