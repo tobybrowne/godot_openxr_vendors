@@ -76,6 +76,8 @@ public:
 	Array get_localization_maps() const;
 	PackedByteArray export_localization_map(const String &p_uuid) const;
 	String import_localization_map(const PackedByteArray &p_data);
+	bool request_localization(const String &p_uuid);
+	bool delete_localization_map(const String &p_uuid);
 
 	static OpenXRMlLocalizationMapExtension *get_singleton();
 

@@ -30,6 +30,10 @@
 #include "extensions/openxr_ml_localization_map_extension.h"
 
 #include <vector>
+#ifdef __ANDROID__
+#include <jni.h>
+#include "android_jni.h"
+#endif
 
 #include <godot_cpp/classes/open_xrapi_extension.hpp>
 #include <godot_cpp/variant/utility_functions.hpp>
@@ -67,6 +71,8 @@ void OpenXRMlLocalizationMapExtension::_bind_methods() {
 	ClassDB::bind_method(D_METHOD("get_localization_maps"), &OpenXRMlLocalizationMapExtension::get_localization_maps);
 	ClassDB::bind_method(D_METHOD("export_localization_map", "uuid"), &OpenXRMlLocalizationMapExtension::export_localization_map);
 	ClassDB::bind_method(D_METHOD("import_localization_map", "data"), &OpenXRMlLocalizationMapExtension::import_localization_map);
+	ClassDB::bind_method(D_METHOD("request_localization", "uuid"), &OpenXRMlLocalizationMapExtension::request_localization);
+	ClassDB::bind_method(D_METHOD("delete_localization_map", "uuid"), &OpenXRMlLocalizationMapExtension::delete_localization_map);
 
 	ADD_SIGNAL(MethodInfo("localization_changed",
 			PropertyInfo(Variant::INT, "state"),
@@ -294,17 +300,6 @@ String OpenXRMlLocalizationMapExtension::import_localization_map(const PackedByt
 		return String();
 	}
 
-	// Request the device to localize into the imported map
-	XrMapLocalizationRequestInfoML request_info = {
-		XR_TYPE_MAP_LOCALIZATION_REQUEST_INFO_ML,
-		nullptr,
-		map_uuid,
-	};
-	xr_result = xrRequestMapLocalizationML(cached_session, &request_info);
-	if (XR_FAILED(xr_result)) {
-		UtilityFunctions::printerr("import_localization_map: xrRequestMapLocalizationML failed result=", (int64_t)xr_result);
-	}
-
 	const uint8_t *d = map_uuid.data;
 	char buf[37];
 	snprintf(buf, sizeof(buf),
@@ -312,6 +307,209 @@ String OpenXRMlLocalizationMapExtension::import_localization_map(const PackedByt
 			d[0], d[1], d[2], d[3], d[4], d[5], d[6], d[7],
 			d[8], d[9], d[10], d[11], d[12], d[13], d[14], d[15]);
 	return String(buf);
+}
+
+bool OpenXRMlLocalizationMapExtension::request_localization(const String &p_uuid) {
+	if (!ml_localization_map_ext || cached_session == XR_NULL_HANDLE) {
+		return false;
+	}
+
+	// Parse UUID string to XrUuidEXT
+	String hex = p_uuid.replace("-", "");
+	if (hex.length() != 32) {
+		UtilityFunctions::printerr("request_localization: invalid UUID format");
+		return false;
+	}
+	XrUuidEXT map_uuid = {};
+	for (int i = 0; i < 16; i++) {
+		map_uuid.data[i] = (uint8_t)hex.substr(i * 2, 2).hex_to_int();
+	}
+
+	XrMapLocalizationRequestInfoML request_info = {
+		XR_TYPE_MAP_LOCALIZATION_REQUEST_INFO_ML,
+		nullptr,
+		map_uuid,
+	};
+	XrResult xr_result = xrRequestMapLocalizationML(cached_session, &request_info);
+	if (XR_FAILED(xr_result)) {
+		UtilityFunctions::printerr("request_localization: xrRequestMapLocalizationML failed result=", (int64_t)xr_result);
+		return false;
+	}
+
+	return true;
+}
+
+bool OpenXRMlLocalizationMapExtension::delete_localization_map(const String &p_uuid) {
+#ifdef __ANDROID__
+	// JVM is captured in JNI_OnLoad when the library is loaded via System.loadLibrary.
+	JavaVM *jvm = get_android_jvm();
+	if (!jvm) {
+		UtilityFunctions::printerr("delete_localization_map: no JVM (JNI_OnLoad not yet called?)");
+		return false;
+	}
+
+	JNIEnv *env = nullptr;
+	bool attached = false;
+	jint env_status = jvm->GetEnv((void **)&env, JNI_VERSION_1_6);
+	if (env_status == JNI_EDETACHED) {
+		if (jvm->AttachCurrentThread(&env, nullptr) != JNI_OK) {
+			UtilityFunctions::printerr("delete_localization_map: AttachCurrentThread failed");
+			return false;
+		}
+		attached = true;
+	} else if (env_status != JNI_OK) {
+		UtilityFunctions::printerr("delete_localization_map: GetEnv failed");
+		return false;
+	}
+
+	bool success = false;
+
+	// android.os.ServiceManager (hidden API — accessible on ML2 enterprise builds)
+	jclass service_manager_cls = env->FindClass("android/os/ServiceManager");
+	if (!service_manager_cls || env->ExceptionCheck()) {
+		env->ExceptionClear();
+		UtilityFunctions::printerr("delete_localization_map: ServiceManager class not found");
+		goto cleanup;
+	}
+
+	{
+		jmethodID get_service = env->GetStaticMethodID(service_manager_cls, "getService",
+				"(Ljava/lang/String;)Landroid/os/IBinder;");
+		if (!get_service || env->ExceptionCheck()) {
+			env->ExceptionClear();
+			UtilityFunctions::printerr("delete_localization_map: ServiceManager.getService not found");
+			goto cleanup;
+		}
+
+		jstring svc_name = env->NewStringUTF("ml.pw.IPassableWorldService");
+		jobject pws_binder = env->CallStaticObjectMethod(service_manager_cls, get_service, svc_name);
+		env->DeleteLocalRef(svc_name);
+
+		if (env->ExceptionCheck()) {
+			env->ExceptionClear();
+			UtilityFunctions::printerr("delete_localization_map: getService threw");
+			goto cleanup;
+		}
+		if (!pws_binder) {
+			UtilityFunctions::printerr("delete_localization_map: ml.pw.IPassableWorldService not found");
+			goto cleanup;
+		}
+
+		jclass parcel_cls = env->FindClass("android/os/Parcel");
+		jclass ibinder_cls = env->FindClass("android/os/IBinder");
+		jmethodID parcel_obtain = env->GetStaticMethodID(parcel_cls, "obtain", "()Landroid/os/Parcel;");
+		jmethodID write_interface_token = env->GetMethodID(parcel_cls, "writeInterfaceToken", "(Ljava/lang/String;)V");
+		jmethodID write_string = env->GetMethodID(parcel_cls, "writeString", "(Ljava/lang/String;)V");
+		jmethodID read_exception = env->GetMethodID(parcel_cls, "readException", "()V");
+		jmethodID read_strong_binder = env->GetMethodID(parcel_cls, "readStrongBinder", "()Landroid/os/IBinder;");
+		jmethodID parcel_recycle = env->GetMethodID(parcel_cls, "recycle", "()V");
+		jmethodID transact = env->GetMethodID(ibinder_cls, "transact",
+				"(ILandroid/os/Parcel;Landroid/os/Parcel;I)Z");
+
+		// Step 1: IPassableWorldService.GetSpacesManager() — transaction code 3
+		jobject data = env->CallStaticObjectMethod(parcel_cls, parcel_obtain);
+		jobject reply = env->CallStaticObjectMethod(parcel_cls, parcel_obtain);
+
+		jstring pws_token = env->NewStringUTF("ml.pw.IPassableWorldService");
+		env->CallVoidMethod(data, write_interface_token, pws_token);
+		env->DeleteLocalRef(pws_token);
+
+		env->CallBooleanMethod(pws_binder, transact, (jint)3, data, reply, (jint)0);
+		if (env->ExceptionCheck()) {
+			env->ExceptionClear();
+			UtilityFunctions::printerr("delete_localization_map: GetSpacesManager transact threw");
+			env->CallVoidMethod(data, parcel_recycle);
+			env->CallVoidMethod(reply, parcel_recycle);
+			goto cleanup;
+		}
+
+		env->CallVoidMethod(reply, read_exception);
+		if (env->ExceptionCheck()) {
+			env->ExceptionClear();
+			UtilityFunctions::printerr("delete_localization_map: GetSpacesManager returned exception");
+			env->CallVoidMethod(data, parcel_recycle);
+			env->CallVoidMethod(reply, parcel_recycle);
+			goto cleanup;
+		}
+
+		jobject map_manager_binder = env->CallObjectMethod(reply, read_strong_binder);
+		env->CallVoidMethod(data, parcel_recycle);
+		env->CallVoidMethod(reply, parcel_recycle);
+
+		if (!map_manager_binder) {
+			UtilityFunctions::printerr("delete_localization_map: GetSpacesManager returned null binder");
+			goto cleanup;
+		}
+
+		// Step 2: IMapManager.DeleteMap(MlIdParcel) — transaction code 14
+		// BpMapManager::DeleteMap calls Parcel::writeParcelable(MlIdParcel) which writes:
+		//   1. int32 1  (non-null indicator from writeParcelable)
+		//   2. writeUtf8AsUtf16(uuid)  (from MlIdParcel::writeToParcel)
+		jmethodID write_int = env->GetMethodID(parcel_cls, "writeInt", "(I)V");
+
+		jobject data2 = env->CallStaticObjectMethod(parcel_cls, parcel_obtain);
+		jobject reply2 = env->CallStaticObjectMethod(parcel_cls, parcel_obtain);
+
+		jstring mm_token = env->NewStringUTF("ml.pw.v2.IMapManager");
+		env->CallVoidMethod(data2, write_interface_token, mm_token);
+		env->DeleteLocalRef(mm_token);
+
+		env->CallVoidMethod(data2, write_int, (jint)1);
+
+		jstring uuid_jstr = env->NewStringUTF(p_uuid.utf8().get_data());
+		env->CallVoidMethod(data2, write_string, uuid_jstr);
+		env->DeleteLocalRef(uuid_jstr);
+
+		env->CallBooleanMethod(map_manager_binder, transact, (jint)14, data2, reply2, (jint)0);
+		if (env->ExceptionCheck()) {
+			jthrowable exc = env->ExceptionOccurred();
+			env->ExceptionClear();
+			jclass thr_cls = env->GetObjectClass(exc);
+			jmethodID get_msg = env->GetMethodID(thr_cls, "getMessage", "()Ljava/lang/String;");
+			jmethodID get_name = env->GetMethodID(env->FindClass("java/lang/Class"), "getName", "()Ljava/lang/String;");
+			jstring exc_type = (jstring)env->CallObjectMethod(thr_cls, get_name);
+			jstring exc_msg = (jstring)env->CallObjectMethod(exc, get_msg);
+			const char *type_str = exc_type ? env->GetStringUTFChars(exc_type, nullptr) : "?";
+			const char *msg_str = exc_msg ? env->GetStringUTFChars(exc_msg, nullptr) : "?";
+			UtilityFunctions::printerr("delete_localization_map: DeleteMap transact threw: ", type_str, ": ", msg_str);
+			if (exc_type) env->ReleaseStringUTFChars(exc_type, type_str);
+			if (exc_msg) env->ReleaseStringUTFChars(exc_msg, msg_str);
+			env->CallVoidMethod(data2, parcel_recycle);
+			env->CallVoidMethod(reply2, parcel_recycle);
+			goto cleanup;
+		}
+
+		env->CallVoidMethod(reply2, read_exception);
+		if (env->ExceptionCheck()) {
+			jthrowable exc2 = env->ExceptionOccurred();
+			env->ExceptionClear();
+			jclass thr_cls2 = env->GetObjectClass(exc2);
+			jmethodID get_msg2 = env->GetMethodID(thr_cls2, "getMessage", "()Ljava/lang/String;");
+			jmethodID get_name2 = env->GetMethodID(env->FindClass("java/lang/Class"), "getName", "()Ljava/lang/String;");
+			jstring exc_type2 = (jstring)env->CallObjectMethod(thr_cls2, get_name2);
+			jstring exc_msg2 = (jstring)env->CallObjectMethod(exc2, get_msg2);
+			const char *type_str2 = exc_type2 ? env->GetStringUTFChars(exc_type2, nullptr) : "?";
+			const char *msg_str2 = exc_msg2 ? env->GetStringUTFChars(exc_msg2, nullptr) : "?";
+			UtilityFunctions::printerr("delete_localization_map: DeleteMap service exception: ", type_str2, ": ", msg_str2);
+			if (exc_type2) env->ReleaseStringUTFChars(exc_type2, type_str2);
+			if (exc_msg2) env->ReleaseStringUTFChars(exc_msg2, msg_str2);
+		} else {
+			success = true;
+		}
+
+		env->CallVoidMethod(data2, parcel_recycle);
+		env->CallVoidMethod(reply2, parcel_recycle);
+	}
+
+cleanup:
+	if (attached) {
+		jvm->DetachCurrentThread();
+	}
+	return success;
+#else
+	UtilityFunctions::printerr("delete_localization_map: only supported on Android");
+	return false;
+#endif
 }
 
 bool OpenXRMlLocalizationMapExtension::initialize_ml_localization_map_extension(const XrInstance &p_instance) {

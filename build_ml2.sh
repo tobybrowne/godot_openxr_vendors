@@ -10,8 +10,8 @@ cd "$REPO_ROOT"
 export PATH="$HOME/miniforge3/bin:$PATH"
 export ANDROID_HOME=~/Library/Android/sdk
 
-# Clear SCons dependency cache so newly added .cpp files are always linked
-rm -f .sconsign.dblite
+# Clean only plugin object files (preserve godot-cpp cache for faster rebuilds)
+find . -path './thirdparty' -prune -o -name '*.o' -print -delete
 
 echo "=== Building macOS framework (for Godot editor) ==="
 scons platform=macos target=template_debug
@@ -28,11 +28,8 @@ rm -rf "$MACOS_PROJECT/template_release/libgodotopenxrvendors.macos.framework"
 cp -r "$MACOS_SRC/template_release/libgodotopenxrvendors.macos.framework" \
   "$MACOS_PROJECT/template_release/libgodotopenxrvendors.macos.framework"
 
-echo "=== Building .so files (arm64 + x86_64) ==="
-./gradlew buildSconsArtifacts
-
-echo "=== Building MagicLeap AAR ==="
-./gradlew :plugin:assembleMagicleapRelease --rerun-tasks
+echo "=== Building .so files + MagicLeap AAR ==="
+./gradlew buildSconsArtifacts :plugin:clean :plugin:assembleMagicleapRelease
 
 echo "=== Copying AAR into Godot project ==="
 cp plugin/build/outputs/aar/godotopenxr-magicleap-release.aar \

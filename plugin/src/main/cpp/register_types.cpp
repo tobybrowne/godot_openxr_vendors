@@ -96,6 +96,7 @@
 #include "extensions/openxr_ml_marker_understanding_extension.h"
 #include "extensions/openxr_ml_spatial_anchors_extension.h"
 #include "extensions/openxr_ml_spatial_anchors_storage_extension.h"
+#include "extensions/openxr_ml_world_mesh_detection_extension.h"
 #include "extensions/openxr_stationary_reference_space_extension.h"
 
 #include "classes/openxr_android_environment_depth.h"
@@ -221,6 +222,7 @@ void initialize_plugin_module(ModuleInitializationLevel p_level) {
 			GDREGISTER_CLASS(OpenXRMlMarkerUnderstandingExtension);
 			GDREGISTER_CLASS(OpenXRMlSpatialAnchorsExtension);
 			GDREGISTER_CLASS(OpenXRMlSpatialAnchorsStorageExtension);
+			GDREGISTER_CLASS(OpenXRMlWorldMeshDetectionExtension);
 			GDREGISTER_CLASS(OpenXRFbSpaceWarpExtension);
 			GDREGISTER_CLASS(OpenXRMetaEnvironmentDepthExtension);
 			GDREGISTER_CLASS(OpenXRAndroidEnvironmentDepthExtension);
@@ -364,6 +366,10 @@ void initialize_plugin_module(ModuleInitializationLevel p_level) {
 				_register_extension_with_openxr(OpenXRMlSpatialAnchorsStorageExtension::get_singleton());
 			}
 
+			if (_get_bool_project_setting("xr/openxr/extensions/magic_leap/world_mesh_detection")) {
+				_register_extension_with_openxr(OpenXRMlWorldMeshDetectionExtension::get_singleton());
+			}
+
 			if (_get_bool_project_setting("xr/openxr/extensions/androidxr/passthrough_camera_state")) {
 				_register_extension_with_openxr(OpenXRAndroidPassthroughCameraStateExtension::get_singleton());
 			}
@@ -419,6 +425,7 @@ void initialize_plugin_module(ModuleInitializationLevel p_level) {
 			_register_extension_as_singleton(OpenXRMlMarkerUnderstandingExtension::get_singleton());
 			_register_extension_as_singleton(OpenXRMlSpatialAnchorsExtension::get_singleton());
 			_register_extension_as_singleton(OpenXRMlSpatialAnchorsStorageExtension::get_singleton());
+			_register_extension_as_singleton(OpenXRMlWorldMeshDetectionExtension::get_singleton());
 			_register_extension_as_singleton(OpenXRAndroidEyeTrackingExtension::get_singleton());
 			_register_extension_as_singleton(OpenXRAndroidFaceTrackingExtension::get_singleton());
 			_register_extension_as_singleton(OpenXRAndroidLightEstimationExtension::get_singleton());
@@ -602,6 +609,7 @@ void add_plugin_project_settings() {
 	_add_bool_project_setting(project_settings, "xr/openxr/extensions/magic_leap/localization_map", false);
 	_add_bool_project_setting(project_settings, "xr/openxr/extensions/magic_leap/marker_understanding", false);
 	_add_bool_project_setting(project_settings, "xr/openxr/extensions/magic_leap/spatial_anchors", false);
+	_add_bool_project_setting(project_settings, "xr/openxr/extensions/magic_leap/world_mesh_detection", false);
 
 	_add_bool_project_setting(project_settings, "xr/openxr/extensions/androidxr/eye_tracking", false);
 	_add_bool_project_setting(project_settings, "xr/openxr/extensions/androidxr/face_tracking", false);
